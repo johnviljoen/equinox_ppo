@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "equinox_ppo"
+version = "0.0.1"
+description = "An equinox implementation of PPO running on Brax GPU simulation environments"
+authors = [
+    { name = "John Viljoen", email = "johnviljoen2@gmail.com" }
+]
+license = { text = "MIT" }
+readme = "README.md"
+keywords = ["Reinforcement Learning", "PPO", "JAX", "Equinox"]
+
+dependencies = [
+    "matplotlib",
+    "tqdm",
+    "jax[cuda12]",
+    "equinox",
+    "brax",
+    "IPython"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-dir]
+equinox_ppo = ""
