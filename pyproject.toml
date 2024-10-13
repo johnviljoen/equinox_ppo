@@ -19,7 +19,8 @@ dependencies = [
     "jax[cuda12]",
     "equinox",
     "brax",
-    "IPython"
+    "IPython",
+    "cmake"
 ]
 
 [tool.setuptools.packages.find]
