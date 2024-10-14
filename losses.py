@@ -109,6 +109,7 @@ def compute_ppo_loss(
     if normalize_advantage:
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
+    #### JOHN YOU ARE HERE - UNCERTAIN ABOUT THE RAW_STD COMPARED WITH BRAX - SEE _LOG_PROB_TEST.py
     # Calculate the Policy Ratio rho_s
     # rho_s = policy(a_t|s_t) / policy_old(a_t|s_t) = exp(log policy(a_t|s_t) - log policy_old(a_t|s_t))
     # Compute the log probabilities under the current policy
@@ -137,14 +138,9 @@ def compute_ppo_loss(
 
     # Entropy reward
     # entropy = - Sum_a policy(a|s) log policy(a|s) * entropy_cost
-
-    ### JOHN YOU ARE HERE - WE HAVE TO LOOK AT THIS TO ENSURE WE ARE VMAPPING AND AVERAGING CORRECTLY
-    ### THIS ENTROPY GOES NEGATIVE WHEN THATS IMPOSSIBLE
-
     key_entropy = jr.split(rng, obs_normalized.shape[0:2])
     entropy = jnp.mean(jax.vmap(jax.vmap(actor_network.entropy))(key_entropy, obs_normalized))
     entropy_loss = entropy_cost * -entropy
-    # entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
 
     # jax.debug.print("DEBUG: entropy: {}", entropy)
 

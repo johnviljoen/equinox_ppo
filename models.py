@@ -7,10 +7,12 @@ import stats
 from typing import Callable, List
 from dataclasses import dataclass
 
+#### JOHN YOU ARE HERE - UNCERTAIN ABOUT THE RAW_STD COMPARED WITH BRAX
+
 class PPOStochasticActor(eqx.Module):
     layers: List[eqx.nn.Linear]
     activation: Callable
-    std: jnp.ndarray  # Standard deviation
+    raw_std: jnp.ndarray  # Standard deviation
     layer_sizes: List[int]
     action_distribution: dataclass = eqx.field(static=True)
 
@@ -21,13 +23,13 @@ class PPOStochasticActor(eqx.Module):
             for i, (in_features, out_features) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:]))
         ]
         self.activation = activation
-        self.std = jnp.ones(layer_sizes[-1])
+        self.raw_std = jnp.zeros(layer_sizes[-1])
         self.layer_sizes = layer_sizes
         self.action_distribution = action_distribution
 
     def __call__(self, key, x):
         mean = self.forward_deterministic(x)
-        action = self.action_distribution.sample(key, mean, self.std)
+        action = self.action_distribution.sample(key, mean, self.raw_std)
         return action, mean
     
     def forward_deterministic(self, x):
@@ -39,7 +41,7 @@ class PPOStochasticActor(eqx.Module):
     def log_prob(self, x, action):
         return self.action_distribution.log_prob(
             loc=self.forward_deterministic(x), 
-            scale=self.std, 
+            scale=self.raw_std, 
             actions=action
         )
 
@@ -47,7 +49,7 @@ class PPOStochasticActor(eqx.Module):
         return self.action_distribution.entropy(
             key=key, 
             loc=self.forward_deterministic(x), 
-            scale=self.std
+            scale=self.raw_std
         )
     
 

@@ -21,7 +21,7 @@ from typing import Any, Tuple
 
 from brax.training import types
 
-import networks as ppo_networks
+import brax_ppo.networks as ppo_networks
 
 from brax.training.types import Params
 import flax
