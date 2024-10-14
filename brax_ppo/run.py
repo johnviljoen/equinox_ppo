@@ -16,7 +16,7 @@ from brax.io import model
 from brax.io import json
 from brax.io import html
 
-import trainnopmap as ppo
+import brax_ppo.train as ppo
 
 env_name = 'inverted_pendulum'  # @param ['ant', 'halfcheetah', 'hopper', 'humanoid', 'humanoidstandup', 'inverted_pendulum', 'inverted_double_pendulum', 'pusher', 'reacher', 'walker2d']
 backend = 'positional'  # @param ['generalized', 'positional', 'spring']

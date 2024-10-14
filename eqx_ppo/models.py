@@ -2,7 +2,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import statistics
+import stats
 
 from typing import Callable, List
 from dataclasses import dataclass
@@ -14,14 +14,14 @@ class PPOStochasticActor(eqx.Module):
     layer_sizes: List[int]
     action_distribution: dataclass = eqx.field(static=True)
 
-    def __init__(self, key, layer_sizes, activation=jax.nn.relu, action_distribution=statistics.NormalTanhDistribution()):
+    def __init__(self, key, layer_sizes, activation=jax.nn.relu, action_distribution=stats.NormalTanhDistribution()):
         keys = jr.split(key, num=len(layer_sizes))
         self.layers = [
             eqx.nn.Linear(in_features, out_features, key=keys[i])
             for i, (in_features, out_features) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:]))
         ]
         self.activation = activation
-        self.std = jnp.ones(layer_sizes[-1])  # Fixed std; can be made trainable
+        self.std = jnp.ones(layer_sizes[-1])
         self.layer_sizes = layer_sizes
         self.action_distribution = action_distribution
 
@@ -37,10 +37,18 @@ class PPOStochasticActor(eqx.Module):
         return mean
 
     def log_prob(self, x, action):
-        return self.action_distribution.log_prob(loc=self.forward_deterministic(x), scale=self.std, actions=action)
+        return self.action_distribution.log_prob(
+            loc=self.forward_deterministic(x), 
+            scale=self.std, 
+            actions=action
+        )
 
     def entropy(self, key, x):
-        return self.action_distribution.entropy(key=key, loc=self.forward_deterministic(x), scale=self.std)
+        return self.action_distribution.entropy(
+            key=key, 
+            loc=self.forward_deterministic(x), 
+            scale=self.std
+        )
     
 
 class PPOValueNetwork(eqx.Module):

@@ -64,10 +64,14 @@ def compute_gae(truncation: jnp.ndarray,
         A float32 tensor of shape [T, B] of advantages.
     """
 
+
+
     truncation_mask = 1 - truncation
     # Append bootstrapped value to get [v1, ..., v_t+1]
     values_t_plus_1 = jnp.concatenate(
         [values[1:], jnp.expand_dims(bootstrap_value, 0)], axis=0)
+
+
     deltas = rewards + discount * (1 - termination) * values_t_plus_1 - values
     deltas *= truncation_mask
 
@@ -92,6 +96,7 @@ def compute_gae(truncation: jnp.ndarray,
         [vs[1:], jnp.expand_dims(bootstrap_value, 0)], axis=0)
     advantages = (rewards + discount *
                     (1 - termination) * vs_t_plus_1 - values) * truncation_mask
+    
     return jax.lax.stop_gradient(vs), jax.lax.stop_gradient(advantages)
 
 
@@ -140,6 +145,9 @@ def compute_ppo_loss(
 
     bootstrap_value = value_apply(normalizer_params, params.value,
                                     data.next_observation[-1])
+    
+    # jax.debug.breakpoint()
+
 
     rewards = data.reward * reward_scaling
     truncation = data.extras['state_extras']['truncation']
@@ -175,13 +183,16 @@ def compute_ppo_loss(
     entropy = jnp.mean(parametric_action_distribution.entropy(policy_logits, rng))
     entropy_loss = entropy_cost * -entropy
 
+
+
     total_loss = policy_loss + v_loss + entropy_loss
 
-    jax.debug.print("entropy: {}", entropy)
+    # jax.debug.print("entropy: {}", entropy)
 
     # jax.debug.print("v_loss: {v_loss}", v_loss = v_loss)
     # jax.debug.print("total_loss: {total_loss}", total_loss = total_loss)
-    # jax.debug.breakpoint()
+
+    jax.debug.breakpoint()
 
     return total_loss, {
         'total_loss': total_loss,

@@ -1,4 +1,5 @@
 from functools import partial
+from time import time
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -14,8 +15,8 @@ from losses import compute_ppo_loss
 from eqx_utils import filter_scan
 from plotting import rollout_and_render
 
-jax.config.update("jax_log_compiles", True)
-jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_log_compiles", True)
+# jax.config.update("jax_debug_nans", True)
 
 class AgentModel(eqx.Module):
     actor_network: PPOStochasticActor
@@ -25,7 +26,7 @@ class TrainingState(eqx.Module):
     opt_state: optax.OptState
     model: AgentModel
     obs_rms: RunningMeanStd
-    env_steps: int
+    env_steps: jnp.ndarray
 
 def generate_rollout_v(key, env_state, training_state, env_v, unroll_length):
     
@@ -88,14 +89,14 @@ def train(
     # The number of environment steps executed for every training step.
     env_step_per_training_step = (minibatch_size * unroll_length * num_minibatches * action_repeat)
     num_evals_after_init = max(num_evals - 1, 1)
-    num_training_steps_per_epoch = np.ceil(
+    num_training_steps_per_epoch = int(np.ceil(
             num_timesteps
             / (
                     num_evals_after_init
                     * env_step_per_training_step
                     * max(num_resets_per_eval, 1)
             )
-    ).astype(int)
+    ))
 
     env_v = envs.training.wrap(env, episode_length=episode_length)
     actor_network = PPOStochasticActor(_key, layer_sizes=[env.observation_size, 64, 64, env.action_size]); _key, key = jr.split(key)
@@ -104,7 +105,7 @@ def train(
     opt = optax.adam(learning_rate)
     opt_state = opt.init(eqx.filter(model, eqx.is_array)) # eqx.is_inexact_array
     obs_rms = RunningMeanStd(mean=jnp.zeros(env.observation_size), var=jnp.ones(env.observation_size), count=1e-4)
-    training_state = TrainingState(opt_state, model, obs_rms, env_steps=0)
+    training_state = TrainingState(opt_state, model, obs_rms, env_steps=jnp.array(0))
     generate_unroll_v = partial(generate_rollout_v, env_v=env_v, unroll_length=unroll_length)
 
     def minibatch_step(carry, minibatch_data):
@@ -165,6 +166,9 @@ def train(
                 (training_state, key_grad),
                 shuffled_data,
                 length=num_minibatches)
+        
+        # jax.debug.print("IMMEDIATELY AFTER SGD STEP SCAN")
+
         return (new_training_state, new_key), metrics
     
     def training_step(carry, _):
@@ -172,9 +176,9 @@ def train(
         training_state, env_state, key = carry
         key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
-        jax.debug.print("DEBUG: key_generate_unroll: {}", key_generate_unroll)
+        # jax.debug.print("DEBUG: key_generate_unroll: {}", key_generate_unroll)
 
-        jax.debug.print("DEBUG: actor std{}", training_state.model.actor_network.std)
+        # jax.debug.print("DEBUG: actor std{}", training_state.model.actor_network.std)
 
         # gather data - we cut up a long trajectory into small trajectories from each iteration
         def f(carry, _):
@@ -191,22 +195,30 @@ def train(
         data = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), data)
 
         # check that the different rollouts are actually doing different stuff - they are
-        jax.debug.print("DEBUG: minibatch rollout deltas: {:0.2f}", jnp.abs(data["obs"][:-1] - data["obs"][1:]).max())
+        # jax.debug.print("DEBUG: minibatch rollout deltas: {:0.2f}", jnp.abs(data["obs"][:-1] - data["obs"][1:]).max())
         
+        # jax.debug.print("IMMEDIATELY BEFORE TRAINING STEP SCAN")
+
         # sgd step
         (new_training_state, _), metrics = filter_scan(
             partial(sgd_step, data=data),
             (training_state, key_sgd), (),
             length=num_updates_per_batch)
         
+        # jax.debug.print("IMMEDIATELY AFTER TRAINING STEP SCAN")
+
         return (new_training_state, new_env_state, new_key), metrics
-    
+        
     def training_epoch(key, training_state, env_state):
+
+        # jax.debug.print("IMMEDIATELY BEFORE EPOCH SCAN")
 
         (new_training_state, new_env_state, _), loss_metrics = filter_scan(
             training_step, (training_state, env_state, key), (),
             length=num_training_steps_per_epoch)
         loss_metrics = jax.tree_util.tree_map(jnp.mean, loss_metrics)
+
+        # jax.debug.print("IMMEDIATELY AFTER EPOCH SCAN")
 
         return new_training_state, new_env_state, loss_metrics
 
@@ -221,7 +233,11 @@ def train(
     #     plt.plot(x[:,i,0], x[:,i,1])
     # plt.savefig('test.png', dpi=500)
 
+    tic = time()
+
     for it in range(num_evals_after_init):
+
+        print(it)
 
         for _ in range(max(num_resets_per_eval, 1)):
         
@@ -235,7 +251,9 @@ def train(
 
             env_state = env_reset_jv(jr.split(_key, num=num_envs)) if num_resets_per_eval > 0 else env_state; _key, key = jr.split(key)
 
-        print(current_step)
+        # print(current_step)
+    
+    print(f"time taken: {time() - tic}")
 
     rollout_and_render(env, training_state.model.actor_network, training_state.obs_rms)
 
@@ -246,3 +264,7 @@ if __name__ == "__main__":
         num_timesteps=2_000_000, num_evals=20, reward_scaling=10, episode_length=1000, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=2048, minibatch_size=1024, seed=1
     )
 
+    # training_state = train(
+    #     env=envs.get_environment("ant", backend="positional"),
+    #     num_timesteps=50_000_000, num_evals=10, reward_scaling=10, episode_length=1000, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=4096, minibatch_size=2048, seed=1
+    # )

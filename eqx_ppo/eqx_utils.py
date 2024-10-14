@@ -2,6 +2,7 @@ from jax import lax
 import equinox as eqx
 import equinox.internal as eqxi
 
+@eqx.filter_jit
 def filter_scan(f, init, xs, length=None, reverse=False, unroll=1):
     # Partition the initial carry and sequence inputs into dynamic and static parts
     init_dynamic, init_static = eqx.partition(init, eqx.is_array)

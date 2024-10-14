@@ -84,7 +84,7 @@ def compute_ppo_loss(
     ):
 
     # Put the time dimension first.
-    # data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
+    data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
 
     # Normalize data
     obs_normalized = observation_rms.normalize(data["obs"])
@@ -153,6 +153,8 @@ def compute_ppo_loss(
 
     # jax.debug.print("v_loss: {v_loss}", v_loss = v_loss)
     # jax.debug.print("total_loss: {total_loss}", total_loss = total_loss)
+    jax.debug.breakpoint()
+
 
     return total_loss, {
         'total_loss': total_loss,
