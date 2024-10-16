@@ -270,6 +270,8 @@ def train(
         # jax.debug.print("DEBUG: policy loss: {:.6f}", metrics["policy_loss"])
         # jax.debug.print("DEBUG: value loss: {:.6f}", metrics["v_loss"])
         # jax.debug.print("DEBUG: entropy loss: {:.6f}", metrics["entropy_loss"])
+        # jax.debug.breakpoint()
+
 
         return (optimizer_state, params, key), metrics
 
@@ -374,6 +376,8 @@ def train(
         toc = time.time()
         # jax.debug.print("time for epoch: {:.2f}", toc-tic)
 
+        jax.debug.print("DEBUG: rms_mean: {}", training_state.normalizer_params.mean)
+        jax.debug.print("DEBUG: rms_std: {}", training_state.normalizer_params.std)
 
         loss_metrics = jax.tree_util.tree_map(jnp.mean, loss_metrics)
         return training_state, state, loss_metrics
@@ -547,7 +551,7 @@ if __name__ == "__main__":
     HTML(html.render(env.sys, [state.pipeline_state]))
 
     train_fn = {
-    'inverted_pendulum': functools.partial(train, num_timesteps=2_000_000, num_evals=20, reward_scaling=10, episode_length=1000, normalize_observations=True, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=2048, batch_size=1024, seed=1),
+    'inverted_pendulum': functools.partial(train, num_timesteps=2_000_000, num_evals=20, reward_scaling=10, episode_length=1000, normalize_observations=True, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=2048, batch_size=1024, seed=2),
     'inverted_double_pendulum': functools.partial(train, num_timesteps=20_000_000, num_evals=20, reward_scaling=10, episode_length=1000, normalize_observations=True, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=2048, batch_size=1024, seed=1),
     'ant': functools.partial(train,  num_timesteps=50_000_000, num_evals=10, reward_scaling=10, episode_length=1000, normalize_observations=True, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=4096, batch_size=2048, seed=1),
     'humanoid': functools.partial(train,  num_timesteps=50_000_000, num_evals=10, reward_scaling=0.1, episode_length=1000, normalize_observations=True, action_repeat=1, unroll_length=10, num_minibatches=32, num_updates_per_batch=8, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-3, num_envs=2048, batch_size=1024, seed=1),

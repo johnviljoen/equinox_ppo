@@ -9,17 +9,17 @@ import equinox as eqx
 import dataclasses
 from brax import envs
 
-from models import PPOStochasticActor, PPOValueNetwork
+from models import PPOActorStochasticMLP, PPOValueNetwork
 from stats import RunningMeanStd
 from losses import compute_ppo_loss
 from eqx_utils import filter_scan
 from plotting import rollout_and_render
 
 # jax.config.update("jax_log_compiles", True)
-# jax.config.update("jax_debug_nans", True)
+jax.config.update("jax_debug_nans", True)
 
 class AgentModel(eqx.Module):
-    actor_network: PPOStochasticActor
+    actor_network: PPOActorStochasticMLP
     value_network: PPOValueNetwork
 
 class TrainingState(eqx.Module):
@@ -99,12 +99,12 @@ def train(
     ))
 
     env_v = envs.training.wrap(env, episode_length=episode_length)
-    actor_network = PPOStochasticActor(_key, layer_sizes=[env.observation_size, 64, 64, env.action_size]); _key, key = jr.split(key)
-    value_network = PPOValueNetwork(_key, layer_sizes=[env.observation_size, 64, 64, 1]); _key, key = jr.split(key)
+    actor_network = PPOActorStochasticMLP(_key, layer_sizes=[env.observation_size, 32, 32, 32, 32, env.action_size*2]); _key, key = jr.split(key)
+    value_network = PPOValueNetwork(_key, layer_sizes=[env.observation_size, 256, 256, 256, 256, 256, 1]); _key, key = jr.split(key)
     model = AgentModel(actor_network=actor_network, value_network=value_network)
     opt = optax.adam(learning_rate)
     opt_state = opt.init(eqx.filter(model, eqx.is_array)) # eqx.is_inexact_array
-    obs_rms = RunningMeanStd(mean=jnp.zeros(env.observation_size), var=jnp.ones(env.observation_size), count=1e-4)
+    obs_rms = RunningMeanStd(mean=jnp.zeros(env.observation_size), var=jnp.ones(env.observation_size), count=jnp.array(1e-4))
     training_state = TrainingState(opt_state, model, obs_rms, env_steps=jnp.array(0))
     generate_unroll_v = partial(generate_rollout_v, env_v=env_v, unroll_length=unroll_length)
 
@@ -197,13 +197,25 @@ def train(
         # check that the different rollouts are actually doing different stuff - they are
         # jax.debug.print("DEBUG: minibatch rollout deltas: {:0.2f}", jnp.abs(data["obs"][:-1] - data["obs"][1:]).max())
         
+        # I FORGOT TO UPDATE RMS every training step
+        rms_updated_training_state = dataclasses.replace(
+            training_state,
+            obs_rms = training_state.obs_rms.update(data["obs"])
+        )
+
+        # jax.debug.print("mean: {}",rms_updated_training_state.obs_rms.mean)
+        # jax.debug.print("var: {}",rms_updated_training_state.obs_rms.var)
+
         # jax.debug.print("IMMEDIATELY BEFORE TRAINING STEP SCAN")
 
         # sgd step
         (new_training_state, _), metrics = filter_scan(
             partial(sgd_step, data=data),
-            (training_state, key_sgd), (),
+            (rms_updated_training_state, key_sgd), (),
             length=num_updates_per_batch)
+
+        # jax.debug.print("mean2: {}",new_training_state.obs_rms.mean)
+        # jax.debug.print("var2: {}",new_training_state.obs_rms.var)
         
         # jax.debug.print("IMMEDIATELY AFTER TRAINING STEP SCAN")
 
@@ -219,6 +231,9 @@ def train(
         loss_metrics = jax.tree_util.tree_map(jnp.mean, loss_metrics)
 
         # jax.debug.print("IMMEDIATELY AFTER EPOCH SCAN")
+
+        # jax.debug.print("DEBUG: rms_mean: {}", new_training_state.obs_rms.mean)
+        # jax.debug.print("DEBUG: rms_std: {}", new_training_state.obs_rms.var)
 
         return new_training_state, new_env_state, loss_metrics
 
@@ -259,12 +274,25 @@ def train(
 
 if __name__ == "__main__":
 
-    training_state = train(
-        env=envs.get_environment("inverted_pendulum", backend="positional"),
-        num_timesteps=2_000_000, num_evals=20, reward_scaling=10, episode_length=1000, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=2048, minibatch_size=1024, seed=1
-    )
-
     # training_state = train(
-    #     env=envs.get_environment("ant", backend="positional"),
-    #     num_timesteps=50_000_000, num_evals=10, reward_scaling=10, episode_length=1000, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=4096, minibatch_size=2048, seed=1
+    #     env=envs.get_environment("inverted_pendulum", backend="positional"),
+    #     num_timesteps=2_000_000, 
+    #     num_evals=20, 
+    #     reward_scaling=10, 
+    #     episode_length=1000, 
+    #     action_repeat=1, 
+    #     unroll_length=5, 
+    #     num_minibatches=int(32), 
+    #     num_updates_per_batch=4, 
+    #     discounting=0.97, 
+    #     learning_rate=3e-4, 
+    #     entropy_cost=1e-2, 
+    #     num_envs=int(2048), 
+    #     minibatch_size=int(1024), 
+    #     seed=1
     # )
+
+    training_state = train(
+        env=envs.get_environment("ant", backend="positional"),
+        num_timesteps=50_000_000, num_evals=10, reward_scaling=10, episode_length=1000, action_repeat=1, unroll_length=5, num_minibatches=32, num_updates_per_batch=4, discounting=0.97, learning_rate=3e-4, entropy_cost=1e-2, num_envs=4096, minibatch_size=2048, seed=1
+    )

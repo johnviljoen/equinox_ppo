@@ -191,6 +191,8 @@ def update(state: RunningStatisticsState,
 
   std = jax.tree_util.tree_map(compute_std, summed_variance, state.std)
 
+  # jax.debug.breakpoint()
+
   return RunningStatisticsState(
       count=count, mean=mean, summed_variance=summed_variance, std=std)
 

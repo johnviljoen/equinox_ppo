@@ -192,7 +192,12 @@ def compute_ppo_loss(
     # jax.debug.print("v_loss: {v_loss}", v_loss = v_loss)
     # jax.debug.print("total_loss: {total_loss}", total_loss = total_loss)
 
-    jax.debug.breakpoint()
+    jax.debug.print("DEBUG: policy loss: {:.6f}", policy_loss)
+    jax.debug.print("DEBUG: value loss: {:.6f}", v_loss)
+    jax.debug.print("DEBUG: entropy loss: {:.6f}", entropy_loss)
+    jax.debug.print("DEBUG: entropy: {:.6f}", entropy)
+
+    # jax.debug.breakpoint()
 
     return total_loss, {
         'total_loss': total_loss,

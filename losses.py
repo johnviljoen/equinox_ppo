@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 
-from models import PPOStochasticActor, PPOValueNetwork
+from models import PPOActorStochasticMLP, PPOValueNetwork
 from stats import RunningMeanStd
 
 
@@ -70,7 +70,7 @@ def compute_gae(truncation: jnp.ndarray,
 
 
 def compute_ppo_loss(
-        actor_network: PPOStochasticActor, # Policy network (Equinox module)
+        actor_network: PPOActorStochasticMLP, # Policy network (Equinox module)
         value_network: PPOValueNetwork,        # Value network (Equinox module)
         observation_rms: RunningMeanStd,        # Running mean std parameters
         data,      # Transition data
@@ -109,7 +109,6 @@ def compute_ppo_loss(
     if normalize_advantage:
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-    #### JOHN YOU ARE HERE - UNCERTAIN ABOUT THE RAW_STD COMPARED WITH BRAX - SEE _LOG_PROB_TEST.py
     # Calculate the Policy Ratio rho_s
     # rho_s = policy(a_t|s_t) / policy_old(a_t|s_t) = exp(log policy(a_t|s_t) - log policy_old(a_t|s_t))
     # Compute the log probabilities under the current policy
@@ -117,8 +116,15 @@ def compute_ppo_loss(
     target_action_log_probs = jax.vmap(jax.vmap(actor_network.log_prob))(obs_normalized, data['action'])
     behaviour_action_log_probs = data["log_prob"]
     rho_s = jnp.exp(target_action_log_probs - behaviour_action_log_probs)
-
-    # jax.debug.print("rho_s: {}", rho_s.mean())
+    
+    logits = jax.vmap(jax.vmap(actor_network.mlp_forward))(obs_normalized)
+    _, raw_scale = jnp.split(logits, 2, axis=-1)
+    scale = (jax.nn.softplus(raw_scale) + actor_network.action_distribution._min_std) * actor_network.action_distribution._var_scale
+    jax.debug.print("DEBUG: dist scale min before softplus: {}", raw_scale.min())
+    jax.debug.print("DEBUG: dist scale min after softplus: {}", scale.min())
+    jax.debug.print("DEBUG: rho_s: {}", rho_s.mean())
+    jax.debug.print("DEBUG: behaviour_action_log_probs: rho_s: {}", behaviour_action_log_probs.mean())
+    jax.debug.print("DEBUG: target_action_log_probs: {}", target_action_log_probs.mean())
 
     # Surrogate Objective: we use a clipped version of the policy ratio to prevent large updates
     # L_surrogate = min(rho_t * A_t, clip(rho_t, 1-eps, 1+eps) * A_t)
@@ -148,9 +154,15 @@ def compute_ppo_loss(
     total_loss = policy_loss + v_loss + entropy_loss
 
     # jax.debug.print("v_loss: {v_loss}", v_loss = v_loss)
+    # jax.debug.print({})
     # jax.debug.print("total_loss: {total_loss}", total_loss = total_loss)
-    jax.debug.breakpoint()
+    # jax.debug.breakpoint()
+    # _ = jax.lax.cond(total_loss == jnp.nan, lambda: jax.debug.breakpoint(), lambda: None)
 
+    # jax.debug.print("DEBUG: policy loss: {:.6f}", policy_loss)
+    # jax.debug.print("DEBUG: value loss: {:.6f}", v_loss)
+    # jax.debug.print("DEBUG: entropy loss: {:.6f}", entropy_loss)
+    # jax.debug.print("DEBUG: entropy: {:.6f}", entropy)
 
     return total_loss, {
         'total_loss': total_loss,
@@ -260,7 +272,7 @@ if __name__ == "__main__":
         _key, key = jr.split(key)
 
         env_v = envs.training.wrap(env, episode_length=episode_length)
-        actor_network = PPOStochasticActor(_key, layer_sizes=[env.observation_size, 64, 64, env.action_size]); _key, key = jr.split(key)
+        actor_network = PPOActorStochasticMLP(_key, layer_sizes=[env.observation_size, 64, 64, env.action_size*2]); _key, key = jr.split(key)
         value_network = PPOValueNetwork(_key, layer_sizes=[env.observation_size, 64, 64, 1]); _key, key = jr.split(key)
         model = AgentModel(actor_network=actor_network, value_network=value_network)
         opt = optax.adam(learning_rate)
@@ -323,9 +335,6 @@ if __name__ == "__main__":
             normalize_advantage=normalize_advantage
         )
 
-        # loss_example = compute_ppo_loss_example(
-
-        # )
 
         print('fin')
 

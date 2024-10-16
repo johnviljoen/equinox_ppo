@@ -34,11 +34,12 @@ class NormalDistribution:
 
 @dataclasses.dataclass
 class NormalTanhDistribution:
-    _min_std: float = 0.001
+    _min_std: float = 0.01 # 0.001
     _var_scale: float = 1.0
 
     def create_dist(self, loc, scale):
         scale = (jax.nn.softplus(scale) + self._min_std) * self._var_scale
+        # jax.debug.print("DEBUG: dist scale after softplus: {}", scale)
         return NormalDistribution(loc=loc, scale=scale)
     
     def sample_no_postprocess(self, key, loc, scale):
@@ -75,7 +76,7 @@ class NormalTanhDistribution:
 class RunningMeanStd(eqx.Module):
     mean: jnp.ndarray
     var: jnp.ndarray
-    count: float
+    count: jnp.ndarray
     epsilon: float = 1e-4
 
     def update(self, arr) -> None:
